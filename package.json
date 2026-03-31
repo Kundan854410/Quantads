@@ -1,0 +1,27 @@
+{
+  "name": "quantads",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/src/server.js",
+  "scripts": {
+    "test": "npm run build && node --test dist/test/**/*.test.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kundan1792008/Quantads.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kundan1792008/Quantads/issues"
+  },
+  "homepage": "https://github.com/kundan1792008/Quantads#readme",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
+}
