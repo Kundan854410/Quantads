@@ -28,6 +28,13 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
   Math.min(Math.max(value, minimum), maximum);
 
 const round = (value: number): number => Number(value.toFixed(2));
+const LTV_RESERVE_DIVISOR = 4;
+const MIN_PRIORITY_BOOST = 0.8;
+const MAX_PRIORITY_BOOST = 1.4;
+const MINIMUM_BID_FLOOR = 0.01;
+const MIN_MARGIN_MULTIPLIER = 0.8;
+const MAX_MARGIN_MULTIPLIER = 3;
+const MINIMUM_BID_INCREMENT = 0.01;
 
 export class AuctionEngine {
   private readonly biddingEngine = new BiddingEngine();
@@ -49,12 +56,16 @@ export class AuctionEngine {
     const reservePrice = round(
       request.reservePrice ??
         request.baseOutcomePrice *
-          clamp(request.audience.verifiedLtv / (request.baseOutcomePrice * 4), 1, 1.35)
+          clamp(request.audience.verifiedLtv / (request.baseOutcomePrice * LTV_RESERVE_DIVISOR), 1, 1.35)
     );
-    const priorityBoost = clamp(request.priorityBoost ?? 1, 0.8, 1.4);
+    const priorityBoost = clamp(request.priorityBoost ?? 1, MIN_PRIORITY_BOOST, MAX_PRIORITY_BOOST);
     const expectedRevenuePerOutcome = request.expectedRevenuePerOutcome ?? request.baseOutcomePrice * 2;
-    const safeFinalBid = Math.max(bidResult.finalBid, 0.01);
-    const marginMultiplier = clamp(expectedRevenuePerOutcome / safeFinalBid, 0.8, 3);
+    const safeFinalBid = Math.max(bidResult.finalBid, MINIMUM_BID_FLOOR);
+    const marginMultiplier = clamp(
+      expectedRevenuePerOutcome / safeFinalBid,
+      MIN_MARGIN_MULTIPLIER,
+      MAX_MARGIN_MULTIPLIER
+    );
     const auctionScore = round(
       bidResult.finalBid *
         bidResult.breakdown.confidenceMultiplier *
@@ -135,7 +146,9 @@ export class AuctionEngine {
       rank,
       isWinning: winner?.bidId === storedBid.bidId,
       recommendedBidToWin:
-        winner && winner.bidId !== storedBid.bidId ? round(winner.finalBid + 0.01) : null,
+        winner && winner.bidId !== storedBid.bidId
+          ? round(winner.finalBid + MINIMUM_BID_INCREMENT)
+          : null,
       paymentStatus: storedBid.paymentStatus,
       invoiceId: quote.invoiceId,
       leaderboard: sorted.slice(0, 5).map((bid, index) => this.toLeaderboardEntry(bid, index + 1)),
