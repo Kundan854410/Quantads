@@ -7,6 +7,7 @@ import { handleContextualAds } from "./routes/ads";
 import { handleAuctionBid, handleAuctionWinner } from "./routes/auctions";
 import { handleCampaignAnalytics, handleRoiSummary } from "./routes/analytics";
 import { handleOutcomeLookup, handleOutcomeReport } from "./routes/outcomes";
+import { handleBciIngest, handleBciAggregated } from "./routes/bci";
 import { logger } from "./lib/logger";
 import {
   OutcomeBidRequestSchema,
@@ -20,7 +21,6 @@ const sendJson = (response: ServerResponse, statusCode: number, body: unknown): 
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(body));
 };
-
 const readJson = async (request: IncomingMessage): Promise<unknown> => {
   const chunks: Buffer[] = [];
 
@@ -82,6 +82,21 @@ export const app = createServer(async (request, response) => {
       return;
     }
 
+    // BCI attention-tracking ingestion (Quantmail JWT required)
+    if (request.method === "POST" && request.url === "/api/v1/bci/attention") {
+      await handleBciIngest(request, response);
+      return;
+    }
+
+    // BCI aggregated metrics lookup (Quantmail JWT required)
+    if (
+      request.method === "GET" &&
+      /^\/api\/v1\/bci\/attention\/[^/]+\/aggregated$/.test(request.url ?? "")
+    ) {
+      await handleBciAggregated(request, response);
+      return;
+    }
+
     // Geofence-based twin simulation
     if (request.method === "POST" && request.url === "/api/v1/twin-sim") {
       const raw = await readJson(request);
@@ -128,8 +143,12 @@ export const app = createServer(async (request, response) => {
     logger.error({ err: message, method: request.method, url: request.url }, "request error");
     sendJson(response, 400, { error: message });
   } finally {
+    const durationMs = Date.now() - start;
+    if (!response.headersSent) {
+      response.setHeader("X-Response-Time", `${durationMs}ms`);
+    }
     logger.info(
-      { method: request.method, url: request.url, durationMs: Date.now() - start },
+      { method: request.method, url: request.url, durationMs },
       "request"
     );
   }
