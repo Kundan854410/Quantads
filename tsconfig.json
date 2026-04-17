@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "node16",
+    "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
     "types": ["node"],
