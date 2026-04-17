@@ -103,7 +103,7 @@ model ContextualVector {
 model BciAttentionEvent {
   id              String    @id @default(uuid())
   userId          String    // opaque user ID – no PII stored
-  campaign        Campaign? @relation(fields: [campaignId], references: [id])
+  campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   campaignId      String?
   platform        String
   sessionId       String

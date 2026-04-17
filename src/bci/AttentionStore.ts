@@ -3,6 +3,9 @@ import { BciAttentionSignal, BciIngestionResponse } from "../types";
 
 const round = (value: number): number => Number(value.toFixed(4));
 
+/** Maximum number of signals retained in memory per user (ring-buffer eviction). */
+const MAX_SIGNALS_PER_USER = 500;
+
 /** Weights used to derive a single composite attention score. */
 const ATTENTION_WEIGHT = 0.4;
 const ENGAGEMENT_WEIGHT = 0.35;
@@ -49,6 +52,10 @@ export class BciAttentionStore {
 
     const existing = this.signals.get(input.userId) ?? [];
     existing.push(record);
+    // Evict the oldest signal when the per-user cap is reached
+    if (existing.length > MAX_SIGNALS_PER_USER) {
+      existing.shift();
+    }
     this.signals.set(input.userId, existing);
 
     return record;
