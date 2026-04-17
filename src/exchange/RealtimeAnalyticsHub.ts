@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { IncomingMessage, Server } from "node:http";
-import { Socket } from "node:net";
+import { Duplex } from "node:stream";
 import { verifyQuantmailToken } from "../middleware/auth";
 import { logger } from "../lib/logger";
 import { ExchangeAnalyticsStore, exchangeAnalyticsStore } from "./ExchangeAnalyticsStore";
@@ -9,7 +9,7 @@ import { nowIso } from "./math";
 
 interface WebSocketClient {
   advertiserId: string;
-  socket: Socket;
+  socket: Duplex;
   authorizedSubject: string;
   heartbeatTimer?: NodeJS.Timeout;
 }
@@ -123,7 +123,7 @@ export class RealtimeAnalyticsHub {
     });
   }
 
-  private handleUpgrade(request: IncomingMessage, socket: Socket): void {
+  private handleUpgrade(request: IncomingMessage, socket: Duplex): void {
     const url = new URL(request.url ?? "/ws/analytics", "http://127.0.0.1");
     const advertiserId = url.searchParams.get("advertiserId") ?? "";
     const token = url.searchParams.get("token") ?? "";
@@ -169,7 +169,7 @@ export class RealtimeAnalyticsHub {
 
     let buffered = Buffer.alloc(0);
     socket.on("data", (chunk) => {
-      buffered = Buffer.concat([buffered, chunk]);
+      buffered = Buffer.concat([buffered, typeof chunk === "string" ? Buffer.from(chunk) : chunk]);
       const frames = decodeFrames(buffered);
       buffered = Buffer.alloc(0);
       for (const frame of frames) {

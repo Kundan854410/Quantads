@@ -83,20 +83,15 @@ export class AdExchangeEngine {
 
     const auctionKey = this.auctionKey(normalizedRequest.placement.auctionId, normalizedRequest.placement.slotId);
     const entries = this.auctions.get(auctionKey) ?? [];
+    entries.push({
+      request: normalizedRequest,
+      response: provisionalResponse,
+      acceptedAt: occurredAt
+    });
+    this.auctions.set(auctionKey, entries);
+    this.recomputeAuction(entries, reservePrice);
 
-    if (!settledAsRejected) {
-      entries.push({
-        request: normalizedRequest,
-        response: provisionalResponse,
-        acceptedAt: occurredAt
-      });
-      this.auctions.set(auctionKey, entries);
-      this.recomputeAuction(entries, reservePrice);
-    }
-
-    const response = settledAsRejected
-      ? provisionalResponse
-      : entries.find((entry) => entry.response.requestId === requestId)?.response ?? provisionalResponse;
+    const response = entries.find((entry) => entry.response.requestId === requestId)?.response ?? provisionalResponse;
     const snapshot = this.getAuctionSnapshot(normalizedRequest.placement.auctionId, normalizedRequest.placement.slotId);
 
     if (response.status === "rejected") {
@@ -131,7 +126,7 @@ export class AdExchangeEngine {
   getAuctionSnapshot(auctionId: string, slotId: string): ExchangeAuctionSnapshot {
     const entries = this.auctions.get(this.auctionKey(auctionId, slotId)) ?? [];
     const leaderboard = entries
-      .map((entry) => this.toRankedBid(entry.response))
+      .map((entry) => this.toRankedBid(entry))
       .sort((left, right) => right.rankedBid - left.rankedBid || right.finalBid - left.finalBid || left.submittedAt.localeCompare(right.submittedAt));
     const winner = leaderboard.find((entry) => entry.settlementStatus === "won") ?? null;
     const secondPrice = winner?.clearingPrice ?? null;
@@ -144,7 +139,7 @@ export class AdExchangeEngine {
       requestedAt: entries[0]?.acceptedAt ?? nowIso(),
       totalRequests: leaderboard.length,
       acceptedBids: leaderboard.filter((entry) => entry.status !== "rejected").length,
-      rejectedBids: 0,
+      rejectedBids: leaderboard.filter((entry) => entry.status === "rejected").length,
       winner,
       leaderboard: leaderboard.slice(0, this.config.maxLeaderboardSize),
       secondPrice,
@@ -219,7 +214,7 @@ export class AdExchangeEngine {
   }
 
   private recomputeAuction(entries: StoredBidEntry[], reservePrice: number): void {
-    const ranked = [...entries].sort((left, right) => {
+    const ranked = entries.filter((entry) => entry.response.status !== "rejected").sort((left, right) => {
       if (right.response.rankedBid !== left.response.rankedBid) {
         return right.response.rankedBid - left.response.rankedBid;
       }
@@ -235,13 +230,18 @@ export class AdExchangeEngine {
     const runnerUp = ranked[1];
     const secondPrice = runnerUp ? round(Math.max(reservePrice, runnerUp.response.rankedBid + this.config.secondPriceIncrement), 4) : round(reservePrice, 4);
 
-    ranked.forEach((entry, index) => {
-      entry.response.rank = index + 1;
+    for (const entry of entries) {
+      entry.response.rank = null;
       entry.response.secondPrice = secondPrice;
-      entry.response.priceToBeat = index === 0 ? null : round((highest?.response.rankedBid ?? reservePrice) + this.config.secondPriceIncrement, 4);
+      entry.response.priceToBeat = highest ? round(highest.response.rankedBid + this.config.secondPriceIncrement, 4) : null;
       entry.response.clearingPrice = null;
       entry.response.isWinner = false;
       entry.response.settlementStatus = entry.response.status === "rejected" ? "rejected" : "outbid";
+    }
+
+    ranked.forEach((entry, index) => {
+      entry.response.rank = index + 1;
+      entry.response.priceToBeat = index === 0 ? null : round((highest?.response.rankedBid ?? reservePrice) + this.config.secondPriceIncrement, 4);
     });
 
     if (highest) {
@@ -254,20 +254,21 @@ export class AdExchangeEngine {
       entry.response.settlementStatus = entry.response.status === "rejected" ? "rejected" : "outbid";
     }
 
-    const leaderboard = ranked.slice(0, this.config.maxLeaderboardSize).map((entry) => this.toRankedBid(entry.response));
-    for (const entry of ranked) {
+    const leaderboard = ranked.slice(0, this.config.maxLeaderboardSize).map((entry) => this.toRankedBid(entry));
+    for (const entry of entries) {
       entry.response.leaderboard = leaderboard;
     }
   }
 
-  private toRankedBid(response: ExchangeBidResponse): RankedExchangeBid {
+  private toRankedBid(entry: StoredBidEntry): RankedExchangeBid {
+    const response = entry.response;
     return {
       requestId: response.requestId,
       advertiserId: response.advertiserId,
       campaignId: response.campaignId,
       slotId: response.slotId,
       creativeId: response.creativeId,
-      submittedAt: response.requestId,
+      submittedAt: entry.acceptedAt,
       status: response.status,
       settlementStatus: response.settlementStatus,
       finalBid: response.finalBid,

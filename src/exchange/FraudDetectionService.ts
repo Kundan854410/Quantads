@@ -118,7 +118,15 @@ export class FraudDetectionService {
     const heuristics = this.heuristics.evaluate(request);
     const isolationForest = this.isolationForest.score(featureVector);
 
-    const combinedScore = round(
+    const hardBlockRuleIds = new Set([
+      "device.bot-signature",
+      "signature.automation-token",
+      "network.offline-request",
+      "engagement.zero-focus"
+    ]);
+    const hardBlockTriggered = heuristics.triggeredRules.some((rule) => hardBlockRuleIds.has(rule.id));
+
+    let combinedScore = round(
       clamp(
         heuristics.score * 0.58 + isolationForest.normalizedScore * 0.42 + heuristics.confidence * 0.06,
         0,
@@ -126,14 +134,19 @@ export class FraudDetectionService {
       ),
       6
     );
+    if (hardBlockTriggered) {
+      combinedScore = Math.max(combinedScore, 0.92);
+    }
+
     const trustedTrafficScore = round(clamp(1 - combinedScore, 0, 1), 6);
-    const suspected = combinedScore >= 0.52 || heuristics.suspected || isolationForest.suspected;
-    const tier = this.resolveTier(combinedScore, heuristics.tier);
-    const decision = combinedScore >= 0.86 ? "rejected" : combinedScore >= 0.66 ? "shadowed" : "accepted";
+    const suspected = hardBlockTriggered || combinedScore >= 0.52 || heuristics.suspected || isolationForest.suspected;
+    const tier = hardBlockTriggered ? "blocked" : this.resolveTier(combinedScore, heuristics.tier);
+    const decision = hardBlockTriggered || combinedScore >= 0.86 ? "rejected" : combinedScore >= 0.66 ? "shadowed" : "accepted";
     const reviewReasons = [
       ...heuristics.reasons,
       isolationForest.reason,
-      `Combined fraud score ${combinedScore} and trusted traffic score ${trustedTrafficScore}`
+      `Combined fraud score ${combinedScore} and trusted traffic score ${trustedTrafficScore}`,
+      ...(hardBlockTriggered ? ["Hard-block bot signatures triggered automatic exchange rejection"] : [])
     ];
 
     if (decision === "accepted") {

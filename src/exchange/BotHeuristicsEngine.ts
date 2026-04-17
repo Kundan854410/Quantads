@@ -62,7 +62,7 @@ export class BotHeuristicsEngine {
     const now = new Date(request.occurredAt ?? nowIso()).getTime();
     const requestId = request.requestId ?? `${request.placement.auctionId}:${request.creativeId}:${now}`;
     const fingerprintKey = `${request.fingerprint.ipHash}:${request.fingerprint.deviceIdHash ?? "anon"}`;
-    const deviceKey = `${request.fingerprint.userAgent}:${request.fingerprint.viewport ?? "n/a"}`;
+    const deviceKey = `${request.fingerprint.userAgent}:${request.placement.viewport.width}x${request.placement.viewport.height}`;
 
     const fingerprintState = this.getFingerprintState(fingerprintKey, now);
     const deviceHistory = this.getDeviceHistory(deviceKey);
