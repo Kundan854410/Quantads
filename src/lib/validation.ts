@@ -96,6 +96,101 @@ export const AuctionBidRequestSchema = z.object({
     .optional()
 });
 
+export const ExchangeBidRequestSchema = z.object({
+  advertiserId: z.string().min(1),
+  agencyId: z.string().min(1),
+  creativeId: z.string().min(1),
+  outcomeType: z.string().min(1),
+  baseOutcomePrice: z.number().positive(),
+  bidCeiling: z.number().positive().optional(),
+  outcomeCount: z.number().int().positive(),
+  pricingCurrency: SettlementCurrencySchema.optional(),
+  placement: z.object({
+    auctionId: z.string().min(1),
+    slotId: z.string().min(1),
+    campaignId: z.string().min(1),
+    platform: z.enum(["quanttube", "quantedits", "quantchill", "quantchat", "quantmail", "quantbrowse"]),
+    pageUrl: z.string().url(),
+    placementPath: z.string().min(1),
+    adFormat: z.enum(["native-card", "story", "search", "rewarded", "video", "display"]),
+    viewport: z.object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      density: z.number().positive()
+    }),
+    viewabilityEstimate: z.number().min(0).max(1),
+    floorPrice: z.number().positive(),
+    reservePrice: z.number().positive().optional(),
+    marketPressure: z.number().positive().optional(),
+    publisherQualityScore: z.number().min(0).max(1).optional(),
+    contentSafetyScore: z.number().min(0).max(1).optional(),
+    geo: z.object({
+      country: z.string().min(2).max(2),
+      region: z.string().min(1).optional(),
+      city: z.string().min(1).optional(),
+      timezoneOffsetMinutes: z.number().int().optional()
+    }).optional()
+  }),
+  audience: z.object({
+    verifiedLtv: z.number().positive(),
+    intentScore: z.number().min(0).max(1),
+    conversionRate: z.number().min(0).max(1),
+    recencyMultiplier: z.number().positive().optional(),
+    attentionScore: z.number().min(0).max(1).optional(),
+    cohortQualityScore: z.number().min(0).max(1).optional(),
+    historicalCtr: z.number().min(0).max(1).optional(),
+    historicalOutcomeRate: z.number().min(0).max(1).optional()
+  }),
+  fingerprint: z.object({
+    sessionId: z.string().min(1),
+    userId: z.string().min(1).optional(),
+    ipHash: z.string().min(1),
+    deviceIdHash: z.string().min(1).optional(),
+    userAgent: z.string().min(1),
+    deviceCategory: z.enum(["desktop", "mobile", "tablet", "tv", "unknown"]),
+    operatingSystem: z.enum(["ios", "android", "windows", "macos", "linux", "other"]),
+    browserFamily: z.enum(["chrome", "safari", "firefox", "edge", "bot", "other"]),
+    language: z.string().min(2).optional(),
+    connectionType: z.enum(["wifi", "cellular", "ethernet", "offline", "unknown"]).optional(),
+    localHour: z.number().int().min(0).max(23).optional(),
+    tabCount: z.number().int().positive().optional(),
+    pageViewsInSession: z.number().int().nonnegative().optional(),
+    referrer: z.string().url().optional(),
+    screenColorDepth: z.number().int().positive().optional(),
+    timezoneOffsetMinutes: z.number().int().optional()
+  }),
+  interaction: z.object({
+    focusDurationMs: z.number().int().nonnegative(),
+    pointerEvents: z.number().int().nonnegative(),
+    pointerSamples: z.array(z.object({
+      dx: z.number(),
+      dy: z.number(),
+      dtMs: z.number().nonnegative()
+    })).optional(),
+    scrollDepth: z.number().min(0).max(1),
+    scrollSamples: z.array(z.object({
+      offset: z.number().nonnegative(),
+      velocity: z.number(),
+      dwellMs: z.number().nonnegative()
+    })).optional(),
+    keyEvents: z.number().int().nonnegative(),
+    rageClicks: z.number().int().nonnegative(),
+    copyPasteEvents: z.number().int().nonnegative(),
+    hoverTargets: z.number().int().nonnegative(),
+    formInteractions: z.number().int().nonnegative(),
+    mediaPlayheadMs: z.number().int().nonnegative().optional()
+  }),
+  settlementAddress: z.string().min(1),
+  settlementNetwork: z.string().min(1),
+  requestId: z.string().min(1).optional(),
+  occurredAt: z.string().datetime().optional()
+});
+
+export const ExchangeAnalyticsQuerySchema = z.object({
+  granularity: z.enum(["minute", "hour"]).optional().default("minute"),
+  limit: z.coerce.number().int().min(1).max(240).optional().default(60)
+});
+
 // ── x402 Payment ─────────────────────────────────────────────────────────────
 
 export const OutcomePaymentRequestSchema = z.object({
@@ -118,6 +213,22 @@ export const OutcomeReportRequestSchema = z.object({
   transactionHash: z.string().min(1),
   occurredAt: z.string().datetime().optional()
 });
+
+// ── BCI Attention Signal ──────────────────────────────────────────────────────
+
+export const BciAttentionSignalSchema = z.object({
+  userId: z.string().min(1),
+  sessionId: z.string().min(1),
+  platform: z.enum(["quanttube", "quantedits", "quantchill", "quantchat", "quantmail", "quantbrowse"]),
+  campaignId: z.string().min(1).optional(),
+  attentionScore: z.number().min(0).max(1),
+  engagementScore: z.number().min(0).max(1),
+  focusScore: z.number().min(0).max(1),
+  adExposureMs: z.number().int().nonnegative().optional(),
+  occurredAt: z.string().datetime().optional()
+});
+
+export type BciAttentionSignalInput = z.infer<typeof BciAttentionSignalSchema>;
 
 // ── Twin Simulation ───────────────────────────────────────────────────────────
 
@@ -152,7 +263,7 @@ export const TwinSimulationRequestSchema = z.object({
   })).min(1)
 });
 
-// ── BCI Attention Ingest ──────────────────────────────────────────────────────
+// ── BCI Attention Ingest (biometric sample) ──────────────────────────────────
 
 export const BciAttentionIngestSchema = z.object({
   sample: z.object({
@@ -176,3 +287,207 @@ export const HFBBidSchema = z.object({
 });
 
 export type HFBBid = z.infer<typeof HFBBidSchema>;
+
+// ── Campaign Management ───────────────────────────────────────────────────────
+
+export const CampaignTargetingRulesSchema = z.object({
+  ageMin: z.number().int().min(0).max(120).optional(),
+  ageMax: z.number().int().min(0).max(120).optional(),
+  interests: z.array(z.string().min(1)).optional(),
+  attentionThreshold: z.number().min(0).max(1).optional(),
+  geoRadius: z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    radiusMeters: z.number().positive()
+  }).optional()
+}).optional().default({});
+
+export const CreativeInputSchema = z.object({
+  url: z.string().url(),
+  format: z.enum(["banner", "video", "native"]),
+  previewUrl: z.string().url().optional()
+});
+
+export const CampaignCreateRequestSchema = z.object({
+  name: z.string().min(1).max(256),
+  budget: z.number().positive(),
+  targetingRules: CampaignTargetingRulesSchema,
+  creatives: z.array(CreativeInputSchema).optional().default([])
+});
+
+export const CampaignUpdateRequestSchema = z.object({
+  name: z.string().min(1).max(256).optional(),
+  budget: z.number().positive().optional(),
+  status: z.enum(["active", "paused"]).optional(),
+  targetingRules: CampaignTargetingRulesSchema
+});
+
+// ── Bid Processing ────────────────────────────────────────────────────────────
+
+export const BidRequestSchema = z.object({
+  campaignId: z.string().min(1),
+  targetUserId: z.string().min(1),
+  baseCpc: z.number().positive(),
+  creativeId: z.string().min(1),
+  advertiserBudget: z.number().positive(),
+  attentionScore: z.number().min(0).max(1).optional()
+});
+
+// ── Tracking ──────────────────────────────────────────────────────────────────
+
+export const ImpressionInputSchema = z.object({
+  adId: z.string().min(1),
+  userId: z.string().min(1),
+  attentionScore: z.number().min(0).max(1),
+  dwellTimeMs: z.number().int().nonnegative()
+});
+
+export const ClickInputSchema = z.object({
+  adId: z.string().min(1),
+  userId: z.string().min(1),
+  timestamp: z.string().datetime().optional()
+});
+
+// ── Smart Ads ──────────────────────────────────────────────────────────────────
+
+const SmartEmotionSchema = z.enum([
+  "curious",
+  "focused",
+  "excited",
+  "delighted",
+  "skeptical",
+  "frustrated",
+  "overwhelmed",
+  "ready-to-convert",
+  "neutral"
+]);
+
+const SmartPlacementSchema = z.object({
+  platform: z.enum(["quanttube", "quantedits", "quantchill", "quantchat", "quantmail", "quantbrowse"]),
+  adFormat: z.enum(["native-card", "story", "search", "rewarded", "video", "display"]),
+  width: z.number().int().min(200).max(1920),
+  height: z.number().int().min(120).max(1600),
+  density: z.number().positive().optional(),
+  deviceCategory: z.enum(["desktop", "mobile", "tablet", "tv", "unknown"]),
+  placementPath: z.string().min(1).max(512),
+  viewabilityEstimate: z.number().min(0).max(1),
+  locale: z.string().min(2).max(32).optional(),
+  localHour: z.number().int().min(0).max(23).optional()
+});
+
+const SmartAudienceSchema = z.object({
+  verifiedLtv: z.number().positive(),
+  intentScore: z.number().min(0).max(1),
+  conversionRate: z.number().min(0).max(1),
+  attentionScore: z.number().min(0).max(1).optional(),
+  fatigueScore: z.number().min(0).max(1).optional(),
+  familiarityScore: z.number().min(0).max(1).optional(),
+  purchasePowerIndex: z.number().min(0).max(1).optional(),
+  recentWins: z.number().int().min(0).optional(),
+  recentLosses: z.number().int().min(0).optional(),
+  lastEmotion: SmartEmotionSchema.optional()
+});
+
+const SmartObjectivesSchema = z.object({
+  primaryOutcome: z.enum(["purchase", "install", "signup", "lead", "watch", "visit"]),
+  priority: z.enum(["reach", "attention", "conversion", "retention"]),
+  targetCpa: z.number().positive().optional(),
+  targetRoas: z.number().positive().optional(),
+  budgetSensitivity: z.number().min(0).max(1).optional()
+});
+
+const SmartProductSchema = z.object({
+  name: z.string().min(1).max(256),
+  brandName: z.string().min(1).max(256),
+  category: z.string().min(1).max(128),
+  price: z.number().nonnegative(),
+  compareAtPrice: z.number().nonnegative().optional(),
+  currency: z.string().regex(/^[A-Za-z]{3,5}$/).optional(),
+  offerHeadline: z.string().min(1).max(256).optional(),
+  offerBody: z.string().min(1).max(512).optional(),
+  destinationUrl: z.string().url(),
+  imageUrl: z.string().url().optional(),
+  valueProps: z.array(z.string().min(1).max(140)).min(1).max(6),
+  proofPoints: z.array(z.string().min(1).max(180)).min(1).max(6),
+  badges: z.array(z.string().min(1).max(80)).max(6).optional()
+});
+
+const SmartHistorySchema = z.object({
+  recentImpressions: z.number().int().min(0).optional(),
+  recentClicks: z.number().int().min(0).optional(),
+  recentConversions: z.number().int().min(0).optional(),
+  priorAttentionDelta: z.number().min(-1).max(1).optional(),
+  previousEmotion: SmartEmotionSchema.optional(),
+  dwellTrend: z.number().min(-1).max(1).optional(),
+  averageScrollDepth: z.number().min(0).max(1).optional()
+}).optional();
+
+const SmartEnvironmentSchema = z.object({
+  contentGenre: z.string().min(1).max(128).optional(),
+  sessionDepth: z.number().int().min(0).max(1000).optional(),
+  culturalMoment: z.string().min(1).max(128).optional(),
+  soundtrackEnergy: z.number().min(0).max(1).optional()
+}).optional();
+
+const SmartCreativePaletteSchema = z.object({
+  background: z.string().min(4).max(32),
+  surface: z.string().min(4).max(32),
+  accent: z.string().min(4).max(32),
+  accentSoft: z.string().min(4).max(32),
+  text: z.string().min(4).max(32),
+  mutedText: z.string().min(4).max(32),
+  ctaText: z.string().min(4).max(32),
+  border: z.string().min(4).max(64),
+  shadow: z.string().min(4).max(64)
+});
+
+const SmartCreativeInputSchema = z.object({
+  creativeId: z.string().min(1),
+  campaignId: z.string().min(1),
+  name: z.string().min(1).max(256),
+  headline: z.string().min(1).max(256),
+  body: z.string().min(1).max(512),
+  ctaLabel: z.string().min(1).max(64),
+  layout: z.enum(["spotlight", "immersive", "commerce-card", "story-stack"]),
+  format: z.enum(["native-card", "story", "search", "rewarded", "video", "display"]),
+  motion: z.enum(["still", "gentle", "energetic"]),
+  messagingAngle: z.enum([
+    "benefit-led",
+    "proof-led",
+    "urgency-led",
+    "education-led",
+    "reassurance-led",
+    "community-led"
+  ]),
+  emotionAffinity: z.array(SmartEmotionSchema).min(1).max(5),
+  attentionBands: z.array(z.enum(["glance", "engaged", "immersed"])).min(1).max(3),
+  platformAffinity: z.array(z.enum(["quanttube", "quantedits", "quantchill", "quantchat", "quantmail", "quantbrowse"])).min(1).max(6),
+  deviceAffinity: z.array(z.enum(["desktop", "mobile", "tablet", "tv", "unknown"])).min(1).max(5),
+  valueProps: z.array(z.string().min(1).max(140)).min(1).max(6),
+  proofPoints: z.array(z.string().min(1).max(180)).min(1).max(6),
+  badges: z.array(z.string().min(1).max(80)).max(6),
+  keywords: z.array(z.string().min(1).max(64)).min(1).max(10),
+  palette: SmartCreativePaletteSchema,
+  urgency: z.number().min(0).max(1),
+  trustWeight: z.number().min(0).max(1),
+  noveltyWeight: z.number().min(0).max(1),
+  fatiguePenalty: z.number().min(0).max(1)
+});
+
+const SmartAdBaseRequestSchema = z.object({
+  advertiserId: z.string().min(1),
+  campaignId: z.string().min(1),
+  userId: z.string().min(1).optional(),
+  placement: SmartPlacementSchema,
+  audience: SmartAudienceSchema,
+  objectives: SmartObjectivesSchema,
+  product: SmartProductSchema,
+  interaction: ExchangeBidRequestSchema.shape.interaction,
+  history: SmartHistorySchema,
+  environment: SmartEnvironmentSchema,
+  creativeInputs: z.array(SmartCreativeInputSchema).max(8).optional()
+});
+
+export const SmartAdEmotionRequestSchema = SmartAdBaseRequestSchema;
+export const SmartAdSelectRequestSchema = SmartAdBaseRequestSchema;
+export const SmartAdRenderRequestSchema = SmartAdBaseRequestSchema;
