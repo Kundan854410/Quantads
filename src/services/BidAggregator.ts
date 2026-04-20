@@ -138,6 +138,9 @@ const attentionFit = (creativeStyle: YieldCreativeStyle, pulse: PulseSnapshot, b
   const lowCognitiveLoad = 1 - clamp(pulse.cognitiveLoad, 0, 1);
   const lowScrollVelocity = 1 - clamp(pulse.scrollVelocity, 0, 1.5) / 1.5;
 
+  // Micro-burst and rewarded placements are intentionally more interruption-tolerant,
+  // so higher cognitive load can still preserve value for short-form or incentive-led
+  // creatives, unlike narrative/native flows that need more available attention.
   const styleScore: Record<YieldCreativeStyle, number> = {
     "micro-burst": 0.45 * pulse.attentionDepth + 0.2 * pulse.eyeAlignment + 0.2 * pulse.cognitiveLoad + 0.15 * lowScrollVelocity,
     narrative: 0.4 * pulse.attentionDepth + 0.25 * normalizedDwell + 0.2 * lowCognitiveLoad + 0.15 * pulse.eyeAlignment,
