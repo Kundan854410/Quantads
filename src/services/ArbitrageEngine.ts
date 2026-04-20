@@ -27,6 +27,8 @@ interface StoredDecision extends ArbitrageDecision {
   platform: BidAggregationRequest["slot"]["platform"];
 }
 
+// Keep a rolling in-memory window large enough to show recent bidder/format trends
+// without letting the dashboard state grow unbounded inside the single-process app.
 const MAX_HISTORY = 250;
 
 const round = (value: number, digits = 4): number => Number(value.toFixed(digits));

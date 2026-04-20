@@ -25,6 +25,8 @@ const readJson = async (req: IncomingMessage): Promise<unknown> => {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 };
 
+const BEARER_PREFIX_LENGTH = "Bearer ".length;
+
 const sendValidationFailure = (res: ServerResponse, error: z.ZodError): void => {
   sendJson(res, 422, {
     error: "Validation failed",
@@ -47,8 +49,14 @@ export const handleYieldDashboardSummary = withAuth(async (_req: IncomingMessage
 });
 
 export const handleYieldDashboardPage = withAuth(async (req: IncomingMessage, res: ServerResponse) => {
-  const rawAuthorization = req.headers.authorization?.slice(7) ?? "";
-  sendHtml(res, 200, getYieldDashHtml({ token: rawAuthorization }));
+  sendHtml(
+    res,
+    200,
+    getYieldDashHtml({
+      dashboard: arbitrageEngine.getDashboard(),
+      hasAuthorizationHeader: Boolean(req.headers.authorization?.slice(BEARER_PREFIX_LENGTH))
+    })
+  );
 });
 
 export type { YieldCreativeStyle, YieldSlotFormat };

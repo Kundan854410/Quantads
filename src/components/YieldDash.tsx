@@ -1,17 +1,42 @@
-interface YieldDashOptions {
-  token: string;
+interface YieldDashboardSnapshot {
+  summary: {
+    totalAuctions: number;
+    executedAuctions: number;
+    holdRate: number;
+    averageYieldSpread: number;
+    timeoutRate: number;
+    averageMarketHeat: number;
+  };
+  bidderLeaderboard: Array<{
+    bidderId: string;
+    wins: number;
+    averageYieldSpread: number;
+    averageLatencyMs: number;
+  }>;
+  formatMix: Array<{
+    creativeStyle: string;
+    wins: number;
+    averageYieldScore: number;
+  }>;
+  recentAuctions: Array<{
+    evaluationId: string;
+    auctionId: string;
+    slotId: string;
+    platform: string;
+    decision: string;
+    bidderId: string | null;
+    creativeStyle: string | null;
+    yieldSpread: number;
+    generatedAt: string;
+  }>;
 }
 
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+interface YieldDashOptions {
+  dashboard: YieldDashboardSnapshot;
+  hasAuthorizationHeader: boolean;
+}
 
-export const getYieldDashHtml = ({ token }: YieldDashOptions): string => {
-  const safeToken = encodeURIComponent(token);
+export const getYieldDashHtml = ({ dashboard, hasAuthorizationHeader }: YieldDashOptions): string => {
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -129,9 +154,10 @@ export const getYieldDashHtml = ({ token }: YieldDashOptions): string => {
     <header>
       <h1>Quantads Yield Dashboard</h1>
       <p class="subtle">Algorithmic arbitrage view for outcome-based yield. The engine selects on expected spread, not raw CPM.</p>
+      <p class="subtle">API source: <code>/api/v1/yield/dashboard</code></p>
       <div class="status-bar">
-        <div class="pill" id="connection-pill">Loading dashboard…</div>
-        <div class="pill" id="refresh-pill">Awaiting latest arbitrage snapshot</div>
+        <div class="pill" id="connection-pill">${hasAuthorizationHeader ? "Authenticated snapshot loaded" : "Snapshot loaded"}</div>
+        <div class="pill" id="refresh-pill">Refresh the page for the latest arbitrage snapshot</div>
       </div>
     </header>
     <main class="stack">
@@ -185,7 +211,7 @@ export const getYieldDashHtml = ({ token }: YieldDashOptions): string => {
       </section>
     </main>
     <script>
-      const authToken = decodeURIComponent(${JSON.stringify(safeToken)});
+      const snapshot = ${JSON.stringify(dashboard)};
       const summaryGrid = document.getElementById("summary-grid");
       const leaderboardBody = document.getElementById("leaderboard-body");
       const formatBody = document.getElementById("format-body");
@@ -271,31 +297,17 @@ export const getYieldDashHtml = ({ token }: YieldDashOptions): string => {
         spreadChart.appendChild(path(auctions.map((_, index) => toPoint(index, summary.timeoutRate * 20)), "#ffd166"));
       };
 
-      const hydrate = (snapshot) => {
-        renderSummary(snapshot.summary);
-        renderRecentAuctions(snapshot.recentAuctions || []);
-        renderLeaderboard(snapshot.bidderLeaderboard || []);
-        renderFormatMix(snapshot.formatMix || []);
-        drawChart(snapshot.recentAuctions || [], snapshot.summary);
+      const hydrate = (dashboardSnapshot) => {
+        renderSummary(dashboardSnapshot.summary);
+        renderRecentAuctions(dashboardSnapshot.recentAuctions || []);
+        renderLeaderboard(dashboardSnapshot.bidderLeaderboard || []);
+        renderFormatMix(dashboardSnapshot.formatMix || []);
+        drawChart(dashboardSnapshot.recentAuctions || [], dashboardSnapshot.summary);
         refreshPill.textContent = "Last refresh " + new Date().toLocaleTimeString();
       };
 
-      const load = () => {
-        fetch('/api/v1/yield/dashboard', {
-          headers: { authorization: 'Bearer ' + authToken }
-        })
-          .then((response) => response.json())
-          .then((snapshot) => {
-            hydrate(snapshot);
-            connectionPill.textContent = 'Dashboard ready';
-          })
-          .catch(() => {
-            connectionPill.textContent = 'Failed to load yield dashboard';
-          });
-      };
-
-      load();
-      setInterval(load, 5000);
+      hydrate(snapshot);
+      connectionPill.textContent = "Dashboard ready";
     </script>
   </body>
 </html>`;
