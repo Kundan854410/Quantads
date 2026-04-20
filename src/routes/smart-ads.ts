@@ -29,6 +29,9 @@ import { logger } from "../lib/logger";
 import { AdaptiveCreativeEngine, AdaptiveCreativeInput } from "../services/AdaptiveCreativeEngine";
 import { CreativeComposer, AdFormat, AD_DIMENSIONS } from "../services/CreativeComposer";
 import { EmotionDetector } from "../services/EmotionDetector";
+import { FocusAggregator } from "../services/FocusAggregator";
+import { FormatShifter } from "../services/FormatShifter";
+import { AdRewardsUI } from "../components/AdRewardsUI";
 import { SmartAdRenderer } from "../components/SmartAdRenderer";
 
 // ─── Singleton service instances ──────────────────────────────────────────────
@@ -39,6 +42,9 @@ const engine = new AdaptiveCreativeEngine();
 const detector = new EmotionDetector({ updateIntervalMs: 5_000 });
 const composer = new CreativeComposer();
 const renderer = new SmartAdRenderer();
+const focusAggregator = new FocusAggregator();
+const formatShifter = new FormatShifter();
+const adRewardsUI = new AdRewardsUI();
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -50,6 +56,20 @@ const VALID_FORMATS: AdFormat[] = [
   "video-preroll"
 ];
 
+const FocusTelemetrySchema = z.object({
+  scrollPauseMs: z.number().min(0),
+  interactionCount: z.number().int().min(0),
+  sampleWindowMs: z.number().int().positive().max(60_000).optional(),
+  skipCount: z.number().int().min(0).optional()
+});
+
+const RewardProgressSchema = z.object({
+  points: z.number().min(0),
+  unskippedViews: z.number().int().min(0),
+  streakDays: z.number().int().min(0),
+  nextRewardAt: z.number().int().min(1)
+});
+
 const RenderRequestSchema = z.object({
   campaignId: z.string().min(1).max(128),
   attentionScore: z.number().min(0).max(1),
@@ -60,7 +80,10 @@ const RenderRequestSchema = z.object({
   format: z.enum(["banner-mobile", "banner-leaderboard", "interstitial", "native", "video-preroll"]),
   audienceLtv: z.number().min(0).optional(),
   transition: z.enum(["fade", "slide-up", "slide-left", "none"]).optional(),
-  showTransparencyButton: z.boolean().optional()
+  showTransparencyButton: z.boolean().optional(),
+  dynamicDelivery: z.boolean().optional(),
+  focusTelemetry: FocusTelemetrySchema.optional(),
+  rewardProgress: RewardProgressSchema.optional()
 });
 
 const EmotionIngestSchema = z.object({
@@ -116,6 +139,16 @@ function parseQs(url: string): Record<string, string> {
   return params;
 }
 
+function resolveFormatForDelivery(requestedFormat: AdFormat, mode: "narrative-longform" | "micro-burst"): AdFormat {
+  if (mode === "micro-burst") {
+    return requestedFormat === "banner-leaderboard" ? "banner-leaderboard" : "banner-mobile";
+  }
+  if (requestedFormat === "banner-mobile" || requestedFormat === "banner-leaderboard") {
+    return "native";
+  }
+  return requestedFormat;
+}
+
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -134,6 +167,42 @@ export const handleSmartAdRender = withAuth(async (req: IncomingMessage, res: Se
     }
 
     const data = parsed.data;
+    let activeFormat: AdFormat = data.format;
+    let focusSnapshot:
+      | {
+        attentionDepthScore: number;
+        attentionDepth: "fragmented" | "steady" | "deep";
+        confidence: number;
+        samplesProcessed: number;
+      }
+      | undefined;
+    let deliveryPlan:
+      | {
+        mode: "narrative-longform" | "micro-burst";
+        maxDurationSeconds: number;
+        pacingMultiplier: number;
+        visualResonance: "cinematic" | "high-impact";
+        rationale: string[];
+      }
+      | undefined;
+
+    if (data.dynamicDelivery) {
+      focusSnapshot = data.focusTelemetry
+        ? focusAggregator.ingest({
+          scrollPauseMs: data.focusTelemetry.scrollPauseMs,
+          interactionCount: data.focusTelemetry.interactionCount,
+          sampleWindowMs: data.focusTelemetry.sampleWindowMs
+        })
+        : focusAggregator.snapshotFromAttentionScore(data.attentionScore);
+      deliveryPlan = formatShifter.selectDelivery({
+        attentionDepthScore: focusSnapshot.attentionDepthScore,
+        skipRate: data.focusTelemetry && data.focusTelemetry.skipCount !== undefined
+          ? data.focusTelemetry.skipCount / Math.max(1, data.focusTelemetry.interactionCount)
+          : 0
+      });
+      activeFormat = resolveFormatForDelivery(data.format, deliveryPlan.mode);
+    }
+
     const input: AdaptiveCreativeInput = {
       campaignId: data.campaignId,
       attentionScore: data.attentionScore,
@@ -145,8 +214,9 @@ export const handleSmartAdRender = withAuth(async (req: IncomingMessage, res: Se
     };
 
     const creativeResult = engine.selectVariant(input);
-    const composed = composer.compose(creativeResult.variant, data.format);
+    const composed = composer.compose(creativeResult.variant, activeFormat);
     const emotionEstimate = detector.getLatestEstimate();
+    const rewards = data.rewardProgress ? adRewardsUI.render(data.rewardProgress) : undefined;
 
     const rendered = renderer.render(
       composed,
@@ -170,6 +240,7 @@ export const handleSmartAdRender = withAuth(async (req: IncomingMessage, res: Se
       campaignId: data.campaignId,
       variantId: creativeResult.variant.variantId,
       format: composed.format,
+      requestedFormat: data.format,
       dimensions: { width: composed.width, height: composed.height },
       animationClass: composed.animationClass,
       selectionRules: creativeResult.selectionRules,
@@ -194,6 +265,9 @@ export const handleSmartAdRender = withAuth(async (req: IncomingMessage, res: Se
         attentionScore: emotionEstimate.attentionScore,
         confidence: emotionEstimate.confidence
       },
+      attentionDepth: focusSnapshot,
+      deliveryPlan,
+      rewardsWidget: rewards,
       composedAt: composed.composedAt
     });
   } catch (err) {
@@ -358,4 +432,3 @@ export const handleAbMetrics = withAuth(async (req: IncomingMessage, res: Server
 
 // ─── AD_DIMENSIONS re-export for use by server.ts ────────────────────────────
 export { AD_DIMENSIONS };
-
