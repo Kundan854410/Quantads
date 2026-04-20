@@ -66,6 +66,14 @@ import {
   handleDeleteCampaign,
   handleCampaignAdAnalytics
 } from "./routes/campaigns";
+import {
+  handleArbitrageEvaluate,
+  handleBidSubmit,
+  handleYieldDashboard,
+  handleSlotBids,
+  handleClearSlot,
+  handleYieldDashboardPage
+} from "./routes/yield";
 import { logger } from "./lib/logger";
 import { realtimeAnalyticsHub } from "./exchange/RealtimeAnalyticsHub";
 import {
@@ -450,6 +458,37 @@ export const app = createServer(async (request, response) => {
       /^\/api\/v1\/bid-war\/advertisers\/[^/]+\/strategy\/optimize(?:\?.*)?$/.test(request.url ?? "")
     ) {
       await handleBidWarStrategyOptimize(request, response);
+      return;
+    }
+
+    // ── Yield Arbitrage System ───────────────────────────────────────────────
+    if (request.method === "POST" && request.url === "/api/v1/yield/arbitrage/evaluate") {
+      await handleArbitrageEvaluate(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/api/v1/yield/bids/submit") {
+      await handleBidSubmit(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && request.url === "/api/v1/yield/dashboard") {
+      await handleYieldDashboard(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && /^\/api\/v1\/yield\/bids\/[^/]+(?:\?.*)?$/.test(request.url ?? "")) {
+      await handleSlotBids(request, response);
+      return;
+    }
+
+    if (request.method === "DELETE" && /^\/api\/v1\/yield\/bids\/[^/]+$/.test(request.url ?? "")) {
+      await handleClearSlot(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && request.url === "/internal/yield-dashboard") {
+      await handleYieldDashboardPage(request, response);
       return;
     }
 
